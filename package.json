@@ -1,0 +1,29 @@
+{
+  "name": "tdin-sol-buybot",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Single-wallet Solana auto-buy bot + dashboard (Jupiter). Manual buys + optional snipe mode.",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "start": "tsx src/server.ts",
+    "dev": "tsx watch src/server.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@solana/web3.js": "^1.95.3",
+    "bs58": "^6.0.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "tsx": "^4.16.2"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.21",
+    "@types/node": "^20.14.10",
+    "typescript": "^5.5.3"
+  }
+}
