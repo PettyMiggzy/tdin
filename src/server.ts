@@ -1,6 +1,6 @@
 import 'dotenv/config';
 import express, { type Request, type Response, type NextFunction } from 'express';
-import cors from 'cors';
+import { timingSafeEqual } from 'crypto';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -17,7 +17,6 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = path.resolve(__dirname, '..', 'public');
 
 const app = express();
-app.use(cors());
 app.use(express.json());
 
 loadConfig();
@@ -31,11 +30,17 @@ loadWallets();
 })();
 
 // Optional shared-secret gate for all /api routes (set DASHBOARD_TOKEN before deploying).
+// Header-only (so the token can't leak into URLs/logs) and compared in constant time.
 const TOKEN = process.env.DASHBOARD_TOKEN || '';
+function tokenMatches(provided: string | undefined): boolean {
+  if (!provided) return false;
+  const a = Buffer.from(provided);
+  const b = Buffer.from(TOKEN);
+  return a.length === b.length && timingSafeEqual(a, b);
+}
 app.use('/api', (req: Request, res: Response, next: NextFunction) => {
   if (!TOKEN) return next();
-  const provided = req.header('x-access-token') || (req.query.token as string | undefined);
-  if (provided === TOKEN) return next();
+  if (tokenMatches(req.header('x-access-token') || undefined)) return next();
   res.status(401).json({ error: 'Unauthorized' });
 });
 

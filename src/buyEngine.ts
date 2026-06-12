@@ -1,3 +1,4 @@
+import { PublicKey } from '@solana/web3.js';
 import { getConfig } from './config';
 import { getQuote, executeSwap } from './jupiter';
 import { getKeypair } from './wallets';
@@ -27,7 +28,7 @@ export async function buyToken(params: BuyParams): Promise<BuyRecord> {
     source,
   };
 
-  if (!params.mint || params.mint.trim().length < 32) return fail(base, 'Invalid mint address');
+  if (!isValidMint((params.mint ?? '').trim())) return fail(base, 'Invalid mint address');
   if (!walletPubkey) return fail(base, 'No active wallet selected');
   if (!(amountSol > 0)) return fail(base, 'Amount must be greater than 0');
 
@@ -67,4 +68,9 @@ function record(rec: BuyRecord): BuyRecord {
 
 function fail(base: BuyRecord, error: string): BuyRecord {
   return record({ ...base, status: 'failed', error });
+}
+
+function isValidMint(mint: string): boolean {
+  if (mint.length < 32 || mint.length > 44) return false;
+  try { new PublicKey(mint); return true; } catch { return false; }
 }
