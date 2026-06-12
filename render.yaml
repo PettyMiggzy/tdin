@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: tdin-sol-buybot
+    runtime: node
+    plan: free
+    buildCommand: npm ci
+    startCommand: npm start
+    envVars:
+      - key: SOLANA_RPC_URL
+        sync: false        # set your mainnet RPC in the dashboard
+      - key: DASHBOARD_TOKEN
+        sync: false        # REQUIRED for a public deploy — gates the API
+      - key: WALLET_SECRET
+        sync: false        # optional: seed a wallet (else add one in the UI)
+      - key: DRY_RUN
+        value: "true"      # keep simulating until you've verified it
