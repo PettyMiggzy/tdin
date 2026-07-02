@@ -55,6 +55,8 @@
   .pill { font-size: 11px; padding: 1px 7px; border-radius: 20px; font-family: var(--mono); }
   .pill.yes { background: rgba(63,185,80,.15); color: var(--green); }
   .pill.no { background: rgba(139,152,169,.12); color: var(--muted); }
+  .pill.warn { background: rgba(210,153,34,.15); color: var(--amber); }
+  .pill.bad { background: rgba(248,81,73,.15); color: var(--red); }
   .log { font-family: var(--mono); font-size: 12px; max-height: 260px; overflow-y: auto; }
   .log div { padding: 1px 0; border-bottom: 1px solid rgba(42,49,64,.4); }
   .log .error { color: var(--red); } .log .warn { color: var(--amber); }
@@ -107,7 +109,7 @@
         <table id="opps">
           <thead><tr>
             <th>Symbol</th><th>Buy @</th><th>Price</th><th>Sell @</th><th>Price</th>
-            <th>Venues</th><th>Gross %</th><th>Net %</th><th>Tradable</th>
+            <th>Venues</th><th>Net % (top)</th><th>Net @ size</th><th>Status</th>
           </tr></thead>
           <tbody></tbody>
         </table>
@@ -169,16 +171,26 @@ function render(s) {
 
   // opportunities
   const ob = document.querySelector('#opps tbody');
-  ob.innerHTML = s.opportunities.length ? s.opportunities.slice(0, 60).map((o) => `
+  ob.innerHTML = s.opportunities.length ? s.opportunities.slice(0, 60).map((o) => {
+    let status;
+    if (o.depthChecked && o.fillable) status = '<span class="pill yes">FILLABLE</span>';
+    else if (o.depthChecked) status = `<span class="pill bad" title="${o.depthReason || 'thin book'}">no fill</span>`;
+    else if (o.profitable) status = '<span class="pill warn">top-only</span>';
+    else status = '<span class="pill no">—</span>';
+    const atSize = (o.netPctAtSize != null)
+      ? `<span class="${cls(o.netPctAtSize)}">${fmt(o.netPctAtSize, 3)}</span>`
+      : '<span class="dim">—</span>';
+    return `
     <tr>
       <td>${o.symbol}</td>
       <td>${o.buyEx}</td><td>${fmt(o.buyPrice, 4)}</td>
       <td>${o.sellEx}</td><td>${fmt(o.sellPrice, 4)}</td>
       <td class="dim">${o.venues ?? '—'}${o.flaggedOutliers ? ` <span title="stale/odd feeds dropped">(−${o.flaggedOutliers})</span>` : ''}</td>
-      <td class="${cls(o.grossPct)}">${fmt(o.grossPct, 3)}</td>
       <td class="${cls(o.netPct)}">${fmt(o.netPct, 3)}</td>
-      <td><span class="pill ${o.profitable ? 'yes' : 'no'}">${o.profitable ? 'YES' : 'no'}</span></td>
-    </tr>`).join('') : '<tr><td colspan="9" class="empty">No cross-venue pairs yet…</td></tr>';
+      <td>${atSize}</td>
+      <td>${status}</td>
+    </tr>`;
+  }).join('') : '<tr><td colspan="9" class="empty">No cross-venue pairs yet…</td></tr>';
 
   // price grid — at scale, show only the highest-spread symbols so the table stays usable
   const allSymbols = Object.keys(s.quotes || {});

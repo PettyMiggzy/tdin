@@ -6,7 +6,9 @@
   "description": "Cross-exchange arbitrage detector + auto-trader (paper mode by default)",
   "scripts": {
     "start": "node index.js",
-    "smoke": "node test/smoke.mjs"
+    "smoke": "node test/smoke.mjs",
+    "probe": "node sim/probe.mjs",
+    "simulate": "node sim/run.mjs"
   },
   "engines": {
     "node": ">=20"

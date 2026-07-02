@@ -143,13 +143,28 @@ non-atomic CEX arbitrage, not a defect. Size positions accordingly.
 
 ---
 
+## Depth verification & simulation
+
+Top-of-book (best bid/ask) *lies* about how much you can trade — the best ask may be $20 deep
+before the price snaps back. Two tools address this:
+
+- **Live depth check** (`DEPTH_CHECK=true`, on by default): each cycle the engine pulls real
+  order books for the top candidates and recomputes the net % *at your trade size*. Only gaps
+  that survive are marked **FILLABLE** and eligible to trade; the rest show **no-fill**. On the
+  dashboard this is the "Net @ size" column and the Status pill.
+- **Probe** (`npm run probe`): one-shot report of how many current gaps survive a depth check at
+  `$SIZE`. In testing, ~half of top-of-book "opportunities" were mirages (e.g. −18%, −38% once
+  you walk the book).
+- **Simulator** (`npm run simulate`, `BANKROLL=25`): a transparent Monte Carlo of 24h P&L for a
+  given bankroll. Its blunt finding: small accounts lose to **fixed inventory-transfer costs** —
+  ~$0.07 of profit per $10 trade can't survive a ~$0.40 transfer every few trades. The same
+  strategy is break-even around $100 and positive at $1k+. Small-account arbitrage is a way to
+  *learn the mechanics*, not to make rent. Every assumption is editable in `src/simulate.js`.
+
 ## Limitations & roadmap
 
-Current version uses **top-of-book** (best bid/ask) only, so it doesn't yet model how far into
-the order book a given size would fill. Natural next steps:
-
-- Order-book **depth** checks so `MAX_TRADE_USD` respects real liquidity.
-- Automated **inventory rebalancing** across venues.
+- Automated **inventory rebalancing** across venues (currently manual; costs modeled in the sim).
+- **Withdrawal/deposit status** checks per token (a gap is useless if you can't move the coin).
 - **Triangular** arbitrage within a single exchange.
 - **DEX / on-chain** legs (incl. Monad) for CEX↔DEX gaps.
 

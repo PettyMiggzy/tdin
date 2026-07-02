@@ -1,5 +1,6 @@
-import { POLL_INTERVAL_MS, EFFECTIVE_MODE } from './config.js';
+import { POLL_INTERVAL_MS, EFFECTIVE_MODE, DEPTH_CHECK, DEPTH_CHECK_TOP, MAX_TRADE_USD } from './config.js';
 import { scan } from './detector.js';
+import { verifyDepth } from './depth.js';
 import { checkTrade } from './risk.js';
 import { log } from './logger.js';
 
@@ -28,13 +29,17 @@ export class Engine {
       this.state.lastScan = Date.now();
 
       const { list: opps, suspicious } = scan(quoteMap);
-      this.state.opportunities = opps;
       this.state.filtered = suspicious;
+
+      // Confirm the top candidates are actually fillable at size against real books.
+      if (DEPTH_CHECK) await this.verifyTop(opps);
+      this.state.opportunities = opps;
 
       if (this.state.running && !this.state.killed) {
         let deployed = 0;
         for (const opp of opps) {
           if (!opp.profitable) break; // list is sorted desc; nothing better remains
+          if (DEPTH_CHECK && !opp.fillable) continue; // top-of-book only, or thin book — don't trade it
           const chk = checkTrade(this.state, opp, deployed);
           if (!chk.ok) {
             if (chk.reason === 'per-cycle notional cap reached') break;
@@ -53,6 +58,24 @@ export class Engine {
       this.busy = false;
       this.state.emitUpdate();
     }
+  }
+
+  // Pull real order books for the top profitable candidates and annotate each
+  // with whether it's genuinely fillable at MAX_TRADE_USD (not just at the tip).
+  async verifyTop(opps) {
+    const top = opps.filter((o) => o.profitable).slice(0, DEPTH_CHECK_TOP);
+    await Promise.all(top.map(async (o) => {
+      const v = await verifyDepth(this.hub, o, MAX_TRADE_USD);
+      o.depthChecked = true;
+      if (v.ok) {
+        o.netPctAtSize = v.netPctAtSize;
+        o.fillable = v.stillProfitable;
+        o.depthReason = v.stillProfitable ? null : 'unprofitable at size';
+      } else {
+        o.fillable = false;
+        o.depthReason = v.reason;
+      }
+    }));
   }
 
   start() {

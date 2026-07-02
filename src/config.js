@@ -25,6 +25,12 @@ export const MAX_SYMBOLS = num(process.env.MAX_SYMBOLS, 300); // cap the auto sc
 
 export const POLL_INTERVAL_MS = num(process.env.POLL_INTERVAL_MS, 5000);
 
+// Depth verification: before flagging/trading a gap, pull real order books and
+// confirm it's fillable at MAX_TRADE_USD. Bounded to the top N candidates per
+// cycle to limit order-book fetches.
+export const DEPTH_CHECK = bool(process.env.DEPTH_CHECK, true);
+export const DEPTH_CHECK_TOP = num(process.env.DEPTH_CHECK_TOP, 8);
+
 // ── strategy / risk ──────────────────────────────────────────
 export const MIN_NET_PROFIT_PCT = num(process.env.MIN_NET_PROFIT_PCT, 0.3);
 // Sanity filters — reject data artifacts that masquerade as huge opportunities.

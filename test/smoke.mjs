@@ -5,6 +5,7 @@ import { State } from '../src/state.js';
 import { Executor } from '../src/executor.js';
 import { ExchangeHub } from '../src/exchanges.js';
 import { scan, findOpportunity } from '../src/detector.js';
+import { walkBuy, walkSell } from '../src/depth.js';
 
 let failures = 0;
 const check = (name, fn) => {
@@ -109,6 +110,24 @@ check('discoverSymbols keeps multi-venue pairs and filters by quote', () => {
   assert(!syms.includes('ZZZ/USDT'), 'single-venue pair should be dropped');
   assert(!syms.includes('FOO/BTC'), 'non-USDT quote should be filtered out');
   assert.equal(syms[0], 'BTC/USDT', 'most-listed pair should sort first');
+});
+
+check('walkBuy walks the book and reports a blended VWAP', () => {
+  const r = walkBuy([[100, 1], [101, 1]], 150); // $150: all of L1 ($100) + $50 of L2
+  assert(r.filled, 'should fill $150');
+  assert(r.vwap > 100 && r.vwap < 101, `vwap ${r.vwap} should sit between levels`);
+});
+
+check('walkBuy reports not-filled when depth is too thin', () => {
+  const r = walkBuy([[100, 0.5]], 100); // only $50 of depth for a $100 order
+  assert.equal(r.filled, false);
+  assert(r.spent <= 50 + 1e-6, 'can only spend available depth');
+});
+
+check('walkSell walks bids downward for a target quantity', () => {
+  const r = walkSell([[100, 1], [99, 1]], 1.5);
+  assert(r.filled);
+  assert(r.vwap > 99 && r.vwap < 100, `vwap ${r.vwap} between bid levels`);
 });
 
 console.log(failures ? `\n${failures} test(s) failed` : '\nSMOKE OK — all core checks passed');
