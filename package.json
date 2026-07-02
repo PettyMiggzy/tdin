@@ -1,0 +1,19 @@
+{
+  "name": "arb-scanner",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Cross-exchange arbitrage detector + auto-trader (paper mode by default)",
+  "scripts": {
+    "start": "node index.js",
+    "smoke": "node test/smoke.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "ccxt": "^4.5.0",
+    "dotenv": "^16.4.0",
+    "express": "^4.19.0"
+  }
+}
