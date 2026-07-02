@@ -15,7 +15,8 @@ export class State extends EventEmitter {
     this.lastScan = 0;
 
     this.quotes = {};           // symbol -> [{ id, bid, ask, taker }]
-    this.opportunities = [];    // latest scan result
+    this.opportunities = [];    // latest scan result (real, non-artifact)
+    this.filtered = 0;          // data-artifact pairs rejected in the last scan
     this.trades = [];           // executed trades, newest first
 
     this.realizedPnl = 0;
@@ -49,6 +50,7 @@ export class State extends EventEmitter {
       lastScan: this.lastScan,
       quotes: this.quotes,
       opportunities: this.opportunities,
+      filtered: this.filtered,
       trades: this.trades.slice(0, 50),
       realizedPnl: this.realizedPnl,
       dailyPnl: this.dailyPnl,

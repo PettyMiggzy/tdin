@@ -1,14 +1,15 @@
-import { POLL_INTERVAL_MS, SYMBOLS, EFFECTIVE_MODE } from './config.js';
+import { POLL_INTERVAL_MS, EFFECTIVE_MODE } from './config.js';
 import { scan } from './detector.js';
 import { checkTrade } from './risk.js';
 import { log } from './logger.js';
 
 // The scan → detect → risk-check → execute loop.
 export class Engine {
-  constructor(hub, state, executor) {
+  constructor(hub, state, executor, symbols) {
     this.hub = hub;
     this.state = state;
     this.executor = executor;
+    this.symbols = symbols;
     this.timer = null;
     this.busy = false; // guards against overlapping ticks on slow networks
   }
@@ -17,7 +18,7 @@ export class Engine {
     if (this.busy) return;
     this.busy = true;
     try {
-      const quoteMap = await this.hub.fetchQuotes(SYMBOLS);
+      const quoteMap = await this.hub.fetchQuotes(this.symbols);
       if (!this.executor.seeded) this.executor.seedPaper(quoteMap);
 
       // Publish quotes for the dashboard.
@@ -26,8 +27,9 @@ export class Engine {
       this.state.quotes = q;
       this.state.lastScan = Date.now();
 
-      const opps = scan(quoteMap);
+      const { list: opps, suspicious } = scan(quoteMap);
       this.state.opportunities = opps;
+      this.state.filtered = suspicious;
 
       if (this.state.running && !this.state.killed) {
         let deployed = 0;
@@ -56,7 +58,7 @@ export class Engine {
   start() {
     log.info(
       `Engine starting in ${EFFECTIVE_MODE.toUpperCase()} mode — `
-      + `${SYMBOLS.length} symbols across ${this.hub.ids.length} exchanges every ${POLL_INTERVAL_MS}ms.`,
+      + `${this.symbols.length} symbols across ${this.hub.ids.length} exchanges every ${POLL_INTERVAL_MS}ms.`,
     );
     this.tick();
     this.timer = setInterval(() => this.tick(), POLL_INTERVAL_MS);

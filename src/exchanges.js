@@ -13,6 +13,25 @@ function credsFor(id) {
   return null;
 }
 
+// A broad set of reputable spot CEXs, used when EXCHANGES=all. Unknown ids or
+// venues without bulk fetchTickers are pruned; failed loads are skipped at init.
+const CURATED_ALL = [
+  'binance', 'binanceus', 'kraken', 'coinbase', 'okx', 'bybit', 'kucoin', 'gate', 'mexc',
+  'bitget', 'htx', 'bingx', 'cryptocom', 'gemini', 'bitstamp', 'bitfinex', 'poloniex',
+  'whitebit', 'probit', 'xt', 'lbank', 'digifinex', 'coinex', 'ascendex', 'phemex', 'woo',
+  'hitbtc', 'bitmart', 'bitrue', 'latoken', 'exmo', 'okcoin', 'p2b', 'coincatch', 'bigone',
+  'fmfwio', 'novadax', 'timex', 'tokocrypto', 'bitvavo',
+];
+
+// Expand the requested list; 'all' → curated venues that support bulk fetchTickers.
+function resolveExchangeIds(requested) {
+  if (!requested.map((s) => s.toLowerCase()).includes('all')) return requested;
+  return CURATED_ALL.filter((id) => {
+    if (typeof ccxt[id] !== 'function') return false;
+    try { return !!new ccxt[id]().has.fetchTickers; } catch { return false; }
+  });
+}
+
 // Wraps a set of CCXT exchange clients and exposes unified quote fetching.
 export class ExchangeHub {
   constructor() {
@@ -20,7 +39,9 @@ export class ExchangeHub {
   }
 
   async init() {
-    await Promise.all(EXCHANGES.map(async (id) => {
+    const ids = resolveExchangeIds(EXCHANGES);
+    log.info(`initializing ${ids.length} exchange(s)…`);
+    await Promise.all(ids.map(async (id) => {
       if (typeof ccxt[id] !== 'function') {
         log.warn(`Unknown exchange id '${id}' — skipping`);
         return;
@@ -67,10 +88,32 @@ export class ExchangeHub {
     return typeof f === 'number' && f >= 0 ? f : DEFAULT_TAKER_FEE;
   }
 
+  // Discover spot pairs listed on >= minVenues connected exchanges, restricted to
+  // the given quote currencies. Sorted by how many venues list them (a rough
+  // liquidity/ubiquity proxy), capped to `max`.
+  discoverSymbols({ quotes = ['USDT'], minVenues = 2, max = 300 } = {}) {
+    const quoteSet = new Set(quotes.map((q) => q.toUpperCase()));
+    const count = new Map(); // symbol -> number of venues listing it
+    for (const ex of this.exchanges.values()) {
+      for (const m of Object.values(ex.markets || {})) {
+        if (!m || m.spot !== true || m.active === false) continue;
+        if (!quoteSet.has(String(m.quote || '').toUpperCase())) continue;
+        count.set(m.symbol, (count.get(m.symbol) || 0) + 1);
+      }
+    }
+    return [...count.entries()]
+      .filter(([, c]) => c >= minVenues)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, max)
+      .map(([s]) => s);
+  }
+
   // Returns Map<symbol, Array<{ id, bid, ask, taker }>> for the requested symbols.
+  // For large scans (many symbols) it pulls each venue's whole ticker set in one
+  // bulk call and filters locally — far cheaper than per-symbol requests.
   async fetchQuotes(symbols) {
-    const out = new Map();
-    for (const s of symbols) out.set(s, []);
+    const out = new Map(symbols.map((s) => [s, []]));
+    const bulk = symbols.length > 40;
 
     await Promise.all([...this.exchanges.entries()].map(async ([id, ex]) => {
       const wanted = symbols.filter((s) => this.hasSymbol(id, s));
@@ -78,14 +121,13 @@ export class ExchangeHub {
 
       let tickers = {};
       try {
-        if (ex.has.fetchTickers) {
-          tickers = await ex.fetchTickers(wanted);
-        } else {
-          tickers = await this._perSymbol(ex, wanted);
-        }
+        if (ex.has.fetchTickers) tickers = bulk ? await ex.fetchTickers() : await ex.fetchTickers(wanted);
+        else tickers = await this._perSymbol(ex, wanted);
       } catch {
-        // Some venues reject a symbol list on fetchTickers — fall back to one-by-one.
-        tickers = await this._perSymbol(ex, wanted);
+        // Some venues reject a symbol list or time out on bulk — degrade gracefully.
+        try {
+          tickers = ex.has.fetchTickers ? await ex.fetchTickers() : await this._perSymbol(ex, wanted);
+        } catch { tickers = {}; }
       }
 
       for (const s of wanted) {

@@ -93,7 +93,9 @@
         <div class="tile"><div class="k">Trades</div><div class="v" id="ntrades">—</div></div>
         <div class="tile"><div class="k">Best net now</div><div class="v" id="best">—</div></div>
         <div class="tile"><div class="k">Exchanges</div><div class="v" id="nex">—</div></div>
+        <div class="tile"><div class="k">Symbols</div><div class="v" id="nsym">—</div></div>
         <div class="tile"><div class="k">Uptime</div><div class="v" id="uptime">—</div></div>
+        <div class="tile"><div class="k">Filtered (junk)</div><div class="v" id="filtered">—</div></div>
         <div class="tile"><div class="k">Errors</div><div class="v" id="errors">—</div></div>
         <div class="tile"><div class="k">Last scan</div><div class="v" id="lastscan">—</div></div>
       </div>
@@ -105,7 +107,7 @@
         <table id="opps">
           <thead><tr>
             <th>Symbol</th><th>Buy @</th><th>Price</th><th>Sell @</th><th>Price</th>
-            <th>Gross %</th><th>Net %</th><th>Tradable</th>
+            <th>Venues</th><th>Gross %</th><th>Net %</th><th>Tradable</th>
           </tr></thead>
           <tbody></tbody>
         </table>
@@ -113,7 +115,7 @@
     </section>
 
     <section class="panel wide">
-      <h2>Price grid — <span class="dim">green = cheapest ask (buy), blue = highest bid (sell)</span></h2>
+      <h2>Price grid <span class="dim" id="gridnote"></span> — <span class="dim">green = cheapest ask (buy), blue = highest bid (sell)</span></h2>
       <div class="scroll"><table id="grid"><thead></thead><tbody></tbody></table></div>
     </section>
 
@@ -156,32 +158,45 @@ function render(s) {
   $('ntrades').textContent = s.trades.length;
   const best = s.opportunities[0];
   $('best').innerHTML = best ? `<span class="${cls(best.netPct)}">${fmt(best.netPct, 3)}%</span>` : '—';
-  $('nex').textContent = Object.keys(s.balances || {}).length || Object.values(s.quotes || {}).reduce((m, a) => Math.max(m, a.length), 0);
+  const exUnion = new Set();
+  Object.values(s.quotes || {}).forEach((a) => a.forEach((q) => exUnion.add(q.id)));
+  $('nex').textContent = exUnion.size || Object.keys(s.balances || {}).length;
+  $('nsym').textContent = Object.keys(s.quotes || {}).length;
   $('uptime').textContent = ago(s.startedAt);
+  $('filtered').innerHTML = `<span class="${s.filtered ? 'neg' : 'dim'}">${s.filtered ?? 0}</span>`;
   $('errors').textContent = s.errors;
   $('lastscan').textContent = s.lastScan ? ago(s.lastScan) + ' ago' : '—';
 
   // opportunities
   const ob = document.querySelector('#opps tbody');
-  ob.innerHTML = s.opportunities.length ? s.opportunities.map((o) => `
+  ob.innerHTML = s.opportunities.length ? s.opportunities.slice(0, 60).map((o) => `
     <tr>
       <td>${o.symbol}</td>
       <td>${o.buyEx}</td><td>${fmt(o.buyPrice, 4)}</td>
       <td>${o.sellEx}</td><td>${fmt(o.sellPrice, 4)}</td>
+      <td class="dim">${o.venues ?? '—'}${o.flaggedOutliers ? ` <span title="stale/odd feeds dropped">(−${o.flaggedOutliers})</span>` : ''}</td>
       <td class="${cls(o.grossPct)}">${fmt(o.grossPct, 3)}</td>
       <td class="${cls(o.netPct)}">${fmt(o.netPct, 3)}</td>
       <td><span class="pill ${o.profitable ? 'yes' : 'no'}">${o.profitable ? 'YES' : 'no'}</span></td>
-    </tr>`).join('') : '<tr><td colspan="8" class="empty">No cross-venue pairs yet…</td></tr>';
+    </tr>`).join('') : '<tr><td colspan="9" class="empty">No cross-venue pairs yet…</td></tr>';
 
-  // price grid
-  const symbols = Object.keys(s.quotes || {});
+  // price grid — at scale, show only the highest-spread symbols so the table stays usable
+  const allSymbols = Object.keys(s.quotes || {});
+  let gridSymbols = allSymbols;
+  if (allSymbols.length > 30) {
+    const top = s.opportunities.slice(0, 25).map((o) => o.symbol);
+    gridSymbols = top.length ? top : allSymbols.slice(0, 25);
+    $('gridnote').textContent = `(top ${gridSymbols.length} of ${allSymbols.length} by spread)`;
+  } else {
+    $('gridnote').textContent = '';
+  }
   const exSet = new Set();
-  symbols.forEach((sym) => (s.quotes[sym] || []).forEach((q) => exSet.add(q.id)));
+  gridSymbols.forEach((sym) => (s.quotes[sym] || []).forEach((q) => exSet.add(q.id)));
   const exes = [...exSet].sort();
   const gh = document.querySelector('#grid thead');
   const gb = document.querySelector('#grid tbody');
   gh.innerHTML = '<tr><th>Symbol</th>' + exes.map((e) => `<th>${e}</th>`).join('') + '</tr>';
-  gb.innerHTML = symbols.map((sym) => {
+  gb.innerHTML = gridSymbols.map((sym) => {
     const row = s.quotes[sym] || [];
     const byId = Object.fromEntries(row.map((q) => [q.id, q]));
     let minAsk = Infinity, maxBid = -Infinity;

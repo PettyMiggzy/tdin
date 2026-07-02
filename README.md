@@ -25,6 +25,13 @@ But go in clear-eyed:
 - **Where edges sometimes still exist:** newer / smaller / thinly-listed tokens, less-liquid
   venues, cross-chain. Bigger gaps — but bigger risk (low liquidity, frozen withdrawals, getting
   stuck holding a bag). Edit `SYMBOLS` in `.env` to point the scanner there.
+- **Most "opportunities" are bad data, not money.** A wide scan surfaces two traps: the same
+  ticker meaning *different tokens* on different venues (a fake "gap" of millions of %), and
+  stale top-of-book quotes on low-volume venues. This tool rejects the first with a median-price
+  outlier filter (`OUTLIER_DEVIATION_PCT`) and a hard spread cap (`MAX_SANE_SPREAD_PCT`). The
+  second — stale/thin quotes — needs order-book **depth** checks, which top-of-book scanning
+  can't see yet (see [Limitations](#limitations--roadmap)). Treat any surviving gap as a
+  *candidate to verify*, not confirmed profit.
 - **CEX arbitrage is not atomic.** You cannot buy-here-sell-there in one transaction. The real
   model is *inventory-based*: pre-fund USDT **and** the coin on **both** exchanges so both legs
   fill instantly, then rebalance inventory periodically. This tool tracks per-venue balances so
@@ -77,10 +84,15 @@ All settings live in `.env` (copy from `.env.example`). Highlights:
 
 | Variable | Default | Meaning |
 |----------|---------|---------|
-| `EXCHANGES` | 10 major venues | CCXT ids to scan (see note below) |
-| `SYMBOLS` | 8 majors | Pairs to watch, e.g. `BTC/USDT,ETH/USDT` |
-| `POLL_INTERVAL_MS` | `5000` | Scan frequency |
+| `EXCHANGES` | `all` | CCXT ids to scan, or `all` for ~40 curated spot venues |
+| `SYMBOLS` | `auto` | Explicit list, or `auto` to discover multi-venue pairs |
+| `QUOTE_CURRENCIES` | `USDT` | Quote currencies to include when `SYMBOLS=auto` |
+| `MIN_VENUES` | `2` | A pair must list on ≥ this many venues to be scanned |
+| `MAX_SYMBOLS` | `300` | Cap on auto-discovered pairs per cycle |
+| `POLL_INTERVAL_MS` | `5000` | Scan frequency (raise to 8000–15000 for big scans) |
 | `MIN_NET_PROFIT_PCT` | `0.3` | Minimum net spread to call a gap tradable |
+| `OUTLIER_DEVIATION_PCT` | `5` | Drop a venue whose price deviates > this % from the median |
+| `MAX_SANE_SPREAD_PCT` | `5` | Spreads wider than this are treated as traps, never traded |
 | `MAX_TRADE_USD` | `100` | Max notional per trade |
 | `MAX_OPEN_USD` | `500` | Max notional deployed per scan cycle |
 | `DAILY_LOSS_LIMIT_USD` | `50` | Auto-stop for the day past this loss |

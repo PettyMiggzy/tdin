@@ -10,14 +10,29 @@ export const EXCHANGES = list(process.env.EXCHANGES, [
   'binance', 'kraken', 'coinbase', 'okx', 'bybit', 'kucoin', 'gate', 'mexc', 'bitget', 'htx',
 ]);
 
-export const SYMBOLS = list(process.env.SYMBOLS, [
+// SYMBOLS=auto → discover every pair listed on >= MIN_VENUES connected exchanges.
+// Otherwise an explicit comma-separated list.
+const SYMBOLS_RAW = list(process.env.SYMBOLS, [
   'BTC/USDT', 'ETH/USDT', 'SOL/USDT', 'XRP/USDT', 'DOGE/USDT', 'LTC/USDT', 'AVAX/USDT', 'LINK/USDT',
 ]);
+export const AUTO_SYMBOLS = SYMBOLS_RAW.length === 1 && /^auto$/i.test(SYMBOLS_RAW[0]);
+export const SYMBOLS = AUTO_SYMBOLS ? [] : SYMBOLS_RAW;
+
+// Auto-discovery tuning.
+export const QUOTE_CURRENCIES = list(process.env.QUOTE_CURRENCIES, ['USDT']);
+export const MIN_VENUES = num(process.env.MIN_VENUES, 2);   // a pair must exist on >= this many venues
+export const MAX_SYMBOLS = num(process.env.MAX_SYMBOLS, 300); // cap the auto scan size
 
 export const POLL_INTERVAL_MS = num(process.env.POLL_INTERVAL_MS, 5000);
 
 // ── strategy / risk ──────────────────────────────────────────
 export const MIN_NET_PROFIT_PCT = num(process.env.MIN_NET_PROFIT_PCT, 0.3);
+// Sanity filters — reject data artifacts that masquerade as huge opportunities.
+// A venue whose mid-price deviates more than this % from the cross-venue median
+// is discarded (stale feed, wrong decimals, or a different token on the same ticker).
+export const OUTLIER_DEVIATION_PCT = num(process.env.OUTLIER_DEVIATION_PCT, 5);
+// Any surviving spread wider than this is treated as un-exitable/illiquid, never traded.
+export const MAX_SANE_SPREAD_PCT = num(process.env.MAX_SANE_SPREAD_PCT, 5);
 export const MAX_TRADE_USD = num(process.env.MAX_TRADE_USD, 100);
 export const MAX_OPEN_USD = num(process.env.MAX_OPEN_USD, 500);
 export const DAILY_LOSS_LIMIT_USD = num(process.env.DAILY_LOSS_LIMIT_USD, 50);
